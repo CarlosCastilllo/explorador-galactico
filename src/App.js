@@ -56,8 +56,10 @@ export default function GalacticExplorer() {
   const [status, setStatus] = useState('waiting'); // waiting, solving, solved, noSolution
   const [energyLog, setEnergyLog] = useState([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(false);
 
   const fileInputRef = useRef(null);
+  const autoPlayIntervalRef = useRef(null);
 
   // Ejemplo de JSON para cargar
   const exampleJson = {
@@ -82,27 +84,51 @@ export default function GalacticExplorer() {
   // Procesa el archivo JSON subido
   const handleFileUpload = (event) => {
     const file = event.target.files[0];
-    if (!file) return;
+    if (!file) {
+      alert("Por favor, selecciona un archivo JSON");
+      return;
+    }
+
+    if (!file.name.endsWith('.json')) {
+      alert("El archivo debe tener extensión .json");
+      return;
+    }
 
     setIsLoading(true);
+    setStatus('waiting');
     
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target.result);
+        
+        // Validar la estructura del JSON
+        if (!data.matriz || !data.origen || !data.destino) {
+          throw new Error("El archivo JSON no tiene la estructura correcta");
+        }
+
         processUniverseData(data);
+        setIsLoading(false);
       } catch (error) {
-        alert("Error al procesar el archivo JSON");
-        console.error(error);
-      } finally {
+        console.error("Error al procesar el archivo JSON:", error);
+        alert("Error al procesar el archivo JSON: " + error.message);
         setIsLoading(false);
       }
     };
-    reader.onerror = () => {
-      alert("Error al leer el archivo");
+    
+    reader.onerror = (error) => {
+      console.error("Error al leer el archivo:", error);
+      alert("Error al leer el archivo: " + error.message);
       setIsLoading(false);
     };
-    reader.readAsText(file);
+
+    try {
+      reader.readAsText(file);
+    } catch (error) {
+      console.error("Error al iniciar la lectura del archivo:", error);
+      alert("Error al iniciar la lectura del archivo: " + error.message);
+      setIsLoading(false);
+    }
   };
 
   // Procesa los datos del universo y crea la matriz
@@ -210,8 +236,13 @@ export default function GalacticExplorer() {
     const path = [];
     const energyHistory = [];
     
-    // Función de backtracking
-    const backtrack = (row, col, energy, visited = new Set()) => {
+    // Función de backtracking recursivo
+    const backtrack = (row, col, energy, visited = new Set(), depth = 0) => {
+      // Evitar desbordamiento de pila y caminos muy largos
+      if (depth > universeCopy.length * universeCopy[0].length) {
+        return false;
+      }
+
       // Clave única para la posición actual
       const posKey = `${row},${col}`;
       
@@ -219,7 +250,24 @@ export default function GalacticExplorer() {
       if (visited.has(posKey)) return false;
       
       // Verificamos si es un agujero negro
-      if (universeCopy[row][col].type === CELL_TYPES.BLACK_HOLE) return false;
+      if (universeCopy[row][col].type === CELL_TYPES.BLACK_HOLE) {
+        // Si estamos en una estrella gigante, verificamos si podemos destruir este agujero negro
+        const lastPos = path[path.length - 1];
+        if (lastPos) {
+          const [lastRow, lastCol] = lastPos;
+          if (universeCopy[lastRow][lastCol].type === CELL_TYPES.GIANT_STAR) {
+            // Destruimos temporalmente el agujero negro
+            const temp = universeCopy[row][col].type;
+            universeCopy[row][col].type = CELL_TYPES.NORMAL;
+            // Continuamos con la búsqueda
+            const result = backtrack(row, col, energy, new Set(visited), depth + 1);
+            // Restauramos el agujero negro
+            universeCopy[row][col].type = temp;
+            return result;
+          }
+        }
+        return false;
+      }
       
       // Verificamos si tenemos suficiente energía para celdas que requieren carga mínima
       if (universeCopy[row][col].type === CELL_TYPES.REQUIRED_CHARGE) {
@@ -255,55 +303,73 @@ export default function GalacticExplorer() {
       // Marcamos la celda como visitada
       visited.add(posKey);
       
-      // Si es un portal, nos movemos a su destino
+      // Si es un portal de entrada, OBLIGATORIAMENTE nos movemos a su destino
       if (universeCopy[row][col].type === CELL_TYPES.PORTAL_IN) {
         const [destRow, destCol] = universeCopy[row][col].additionalInfo.destination;
-        if (backtrack(destRow, destCol, newEnergy, visited)) {
+        if (backtrack(destRow, destCol, newEnergy, new Set(visited), depth + 1)) {
           return true;
         }
+        // Si no encontramos solución desde el destino del portal, retrocedemos
+        path.pop();
+        energyHistory.pop();
+        return false;
       }
       
-      // Si es un agujero de gusano y no ha sido usado, nos movemos a su salida
+      // Si es un agujero de gusano de entrada y no ha sido usado, OBLIGATORIAMENTE nos movemos a su salida
       if (universeCopy[row][col].type === CELL_TYPES.WORMHOLE_IN && !universeCopy[row][col].additionalInfo.used) {
         const [destRow, destCol] = universeCopy[row][col].additionalInfo.destination;
         universeCopy[row][col].additionalInfo.used = true; // Marcamos como usado
-        if (backtrack(destRow, destCol, newEnergy, visited)) {
+        if (backtrack(destRow, destCol, newEnergy, new Set(visited), depth + 1)) {
           return true;
         }
-        universeCopy[row][col].additionalInfo.used = false; // Desmarcamos si no encontramos solución
-      }
-      
-      // Verificamos si hay estrellas gigantes que puedan destruir agujeros negros adyacentes
-      if (universeCopy[row][col].type === CELL_TYPES.GIANT_STAR) {
-        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]]; // arriba, abajo, izquierda, derecha
-        for (const [dr, dc] of directions) {
-          const newRow = row + dr;
-          const newCol = col + dc;
-          
-          // Verificar que la nueva posición está dentro de los límites
-          if (newRow >= 0 && newRow < universeCopy.length && 
-              newCol >= 0 && newCol < universeCopy[0].length) {
-            // Si es un agujero negro, lo destruimos temporalmente
-            if (universeCopy[newRow][newCol].type === CELL_TYPES.BLACK_HOLE) {
-              const originalType = universeCopy[newRow][newCol].type;
-              universeCopy[newRow][newCol].type = CELL_TYPES.NORMAL;
-              
-              // Intentamos continuar por este camino
-              if (backtrack(newRow, newCol, newEnergy, new Set(visited))) {
-                return true;
-              }
-              
-              // Restauramos el agujero negro si no encontramos solución
-              universeCopy[newRow][newCol].type = originalType;
-              break; // Solo destruimos un agujero negro
-            }
-          }
-        }
+        // Si no encontramos solución desde la salida del agujero de gusano, retrocedemos
+        universeCopy[row][col].additionalInfo.used = false; // Desmarcamos
+        path.pop();
+        energyHistory.pop();
+        return false;
       }
       
       // Movimientos posibles: arriba, abajo, izquierda, derecha
       const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
       
+      // Añadimos algo de aleatoriedad en la exploración
+      if (Math.random() < 0.3) { // 30% de las veces exploramos en orden aleatorio
+        for (let i = directions.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [directions[i], directions[j]] = [directions[j], directions[i]];
+        }
+      } else {
+        // El resto del tiempo usamos una heurística que combina distancia y energía
+        const [targetRow, targetCol] = universeData.destino;
+        directions.sort((a, b) => {
+          const [dr1, dc1] = a;
+          const [dr2, dc2] = b;
+          const newRow1 = row + dr1;
+          const newCol1 = col + dc1;
+          const newRow2 = row + dr2;
+          const newCol2 = col + dc2;
+          
+          // Calculamos distancia Manhattan
+          const dist1 = Math.abs(newRow1 - targetRow) + Math.abs(newCol1 - targetCol);
+          const dist2 = Math.abs(newRow2 - targetRow) + Math.abs(newCol2 - targetCol);
+          
+          // Consideramos también el costo de energía si la celda es válida
+          const energy1 = (newRow1 >= 0 && newRow1 < universeCopy.length && 
+                          newCol1 >= 0 && newCol1 < universeCopy[0].length) ? 
+                          universeCopy[newRow1][newCol1].energyCost : Infinity;
+          
+          const energy2 = (newRow2 >= 0 && newRow2 < universeCopy.length && 
+                          newCol2 >= 0 && newCol2 < universeCopy[0].length) ? 
+                          universeCopy[newRow2][newCol2].energyCost : Infinity;
+          
+          // Combinamos distancia y energía para la heurística
+          const score1 = dist1 * energy1;
+          const score2 = dist2 * energy2;
+          
+          return score1 - score2;
+        });
+      }
+
       for (const [dr, dc] of directions) {
         const newRow = row + dr;
         const newCol = col + dc;
@@ -312,7 +378,7 @@ export default function GalacticExplorer() {
         if (newRow >= 0 && newRow < universeCopy.length && 
             newCol >= 0 && newCol < universeCopy[0].length) {
           // Intentamos movernos a la nueva posición
-          if (backtrack(newRow, newCol, newEnergy, new Set(visited))) {
+          if (backtrack(newRow, newCol, newEnergy, new Set(visited), depth + 1)) {
             return true;
           }
         }
@@ -323,15 +389,20 @@ export default function GalacticExplorer() {
       energyHistory.pop(); // Quitamos el registro de energía
       return false;
     };
-    
+
     // Iniciamos el backtracking desde la posición inicial
-    const solutionFound = backtrack(startRow, startCol, initialEnergy);
-    
-    if (solutionFound) {
-      setSolution(path);
-      setEnergyLog(energyHistory);
-      setStatus('solved');
-    } else {
+    try {
+      const solutionFound = backtrack(startRow, startCol, initialEnergy);
+      
+      if (solutionFound) {
+        setSolution(path);
+        setEnergyLog(energyHistory);
+        setStatus('solved');
+      } else {
+        setStatus('noSolution');
+      }
+    } catch (error) {
+      console.error("Error durante la búsqueda:", error);
       setStatus('noSolution');
     }
   };
@@ -350,8 +421,43 @@ export default function GalacticExplorer() {
     }
   };
 
-  // Reinicia la animación
+  // Función para iniciar la animación automática
+  const startAutoPlay = () => {
+    if (!isAutoPlaying && currentStepIndex < solution.length - 1) {
+      setIsAutoPlaying(true);
+      autoPlayIntervalRef.current = setInterval(() => {
+        setCurrentStepIndex(prevIndex => {
+          if (prevIndex >= solution.length - 1) {
+            clearInterval(autoPlayIntervalRef.current);
+            setIsAutoPlaying(false);
+            return prevIndex;
+          }
+          return prevIndex + 1;
+        });
+      }, 500); // Intervalo de 500ms entre cada paso
+    }
+  };
+
+  // Función para detener la animación automática
+  const stopAutoPlay = () => {
+    if (isAutoPlaying) {
+      clearInterval(autoPlayIntervalRef.current);
+      setIsAutoPlaying(false);
+    }
+  };
+
+  // Limpiar el intervalo cuando el componente se desmonte
+  useEffect(() => {
+    return () => {
+      if (autoPlayIntervalRef.current) {
+        clearInterval(autoPlayIntervalRef.current);
+      }
+    };
+  }, []);
+
+  // Detener la animación automática cuando se reinicia
   const resetAnimation = () => {
+    stopAutoPlay();
     setCurrentStepIndex(-1);
   };
 
@@ -424,7 +530,7 @@ export default function GalacticExplorer() {
     ];
 
     return (
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 mt-4 text-gray-300">
         {legendItems.map(item => (
           <div key={item.type} className="flex items-center space-x-2">
             <div className={`${CELL_COLORS[item.type]} w-4 h-4 rounded`}></div>
@@ -472,7 +578,7 @@ export default function GalacticExplorer() {
     }
 
     return (
-      <div className="flex items-center mb-4 p-2 bg-gray-800 rounded">
+      <div className="flex items-center mb-4 p-2 bg-gray-800 rounded text-white">
         <div className="flex items-center space-x-2">
           {statusIcon}
           <span>{statusMessage}</span>
@@ -482,86 +588,200 @@ export default function GalacticExplorer() {
     );
   };
 
+  // Función para generar un mapa aleatorio
+  const generateRandomMap = () => {
+    const filas = 10;
+    const columnas = 10;
+    
+    const randomCoord = () => [
+      Math.floor(Math.random() * filas),
+      Math.floor(Math.random() * columnas)
+    ];
+
+    const isCoordTaken = (coord, takenCoords) => {
+      return takenCoords.some(([x, y]) => x === coord[0] && y === coord[1]);
+    };
+
+    const getRandomUniqueCoord = (takenCoords) => {
+      let coord;
+      do {
+        coord = randomCoord();
+      } while (isCoordTaken(coord, takenCoords));
+      return coord;
+    };
+
+    // Coordenadas ocupadas
+    const takenCoords = [];
+
+    // Generar origen y destino
+    const origen = [0, 0];
+    const destino = [filas - 1, columnas - 1];
+    takenCoords.push(origen, destino);
+
+    // Generar agujeros negros (3-5)
+    const numAgujerosNegros = Math.floor(Math.random() * 3) + 3;
+    const agujerosNegros = [];
+    for (let i = 0; i < numAgujerosNegros; i++) {
+      const coord = getRandomUniqueCoord(takenCoords);
+      agujerosNegros.push(coord);
+      takenCoords.push(coord);
+    }
+
+    // Generar estrellas gigantes (2-4)
+    const numEstrellasGigantes = Math.floor(Math.random() * 3) + 2;
+    const estrellasGigantes = [];
+    for (let i = 0; i < numEstrellasGigantes; i++) {
+      const coord = getRandomUniqueCoord(takenCoords);
+      estrellasGigantes.push(coord);
+      takenCoords.push(coord);
+    }
+
+    // Generar portales (1-2 pares)
+    const numPortales = Math.floor(Math.random() * 2) + 1;
+    const portales = [];
+    for (let i = 0; i < numPortales; i++) {
+      const desde = getRandomUniqueCoord(takenCoords);
+      const hasta = getRandomUniqueCoord(takenCoords);
+      portales.push({ desde, hasta });
+      takenCoords.push(desde, hasta);
+    }
+
+    // Generar agujeros de gusano (1-2 pares)
+    const numGusanos = Math.floor(Math.random() * 2) + 1;
+    const agujerosGusano = [];
+    for (let i = 0; i < numGusanos; i++) {
+      const entrada = getRandomUniqueCoord(takenCoords);
+      const salida = getRandomUniqueCoord(takenCoords);
+      agujerosGusano.push({ entrada, salida });
+      takenCoords.push(entrada, salida);
+    }
+
+    // Generar zonas de recarga (2-4)
+    const numZonasRecarga = Math.floor(Math.random() * 3) + 2;
+    const zonasRecarga = [];
+    for (let i = 0; i < numZonasRecarga; i++) {
+      const coord = getRandomUniqueCoord(takenCoords);
+      const multiplier = Math.floor(Math.random() * 3) + 1;
+      zonasRecarga.push([...coord, multiplier]);
+      takenCoords.push(coord);
+    }
+
+    // Generar matriz de costes de energía
+    const matrizInicial = Array(filas).fill().map(() => 
+      Array(columnas).fill().map(() => Math.floor(Math.random() * 10) + 1)
+    );
+
+    const randomMap = {
+      matriz: { filas, columnas },
+      origen,
+      destino,
+      agujerosNegros,
+      estrellasGigantes,
+      portales,
+      agujerosGusano,
+      zonasRecarga,
+      celdasCargaRequerida: [],
+      cargaInicial: 50,
+      matrizInicial
+    };
+
+    processUniverseData(randomMap);
+    setStatus('waiting');
+    setSolution([]);
+    setCurrentStepIndex(-1);
+    setEnergyLog([]);
+  };
+
   return (
-    <div className="flex flex-col min-h-screen bg-gray-900 text-white p-4">
-      <h1 className="text-2xl font-bold mb-4">Explorador Galáctico</h1>
-      
-      {/* Panel de control */}
-      <div className="flex flex-wrap gap-4 mb-4">
-        <button
-          onClick={() => fileInputRef.current.click()}
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
-          disabled={isLoading}
-        >
-          Cargar JSON
-        </button>
-        <input
-          type="file"
-          ref={fileInputRef}
-          onChange={handleFileUpload}
-          accept=".json"
-          className="hidden"
-        />
+    <div className="container mx-auto p-4 bg-gray-900 text-white min-h-screen">
+      <div className="flex flex-col gap-4">
+        <div className="flex gap-4 items-center">
+          <input
+            type="file"
+            ref={fileInputRef}
+            onChange={handleFileUpload}
+            accept=".json"
+            className="hidden"
+          />
+          <button
+            onClick={() => fileInputRef.current.click()}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Cargar JSON
+          </button>
+          <button
+            onClick={loadExampleJson}
+            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Cargar Ejemplo
+          </button>
+          <button
+            onClick={generateRandomMap}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded"
+          >
+            Generar Mapa Aleatorio
+          </button>
+          {universe.length > 0 && (
+            <button
+              onClick={findSolution}
+              className="bg-yellow-600 hover:bg-yellow-700 text-white font-bold py-2 px-4 rounded"
+              disabled={status === 'solving'}
+            >
+              Buscar Solución
+            </button>
+          )}
+        </div>
         
-        <button
-          onClick={loadExampleJson}
-          className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 rounded"
-          disabled={isLoading}
-        >
-          Cargar Ejemplo
-        </button>
+        {/* Estado y controles de animación */}
+        {renderStatusInfo()}
         
-        <button
-          onClick={findSolution}
-          className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-          disabled={!universeData || status === 'solving' || isLoading}
-        >
-          Buscar Solución
-        </button>
+        {status === 'solved' && (
+          <div className="flex gap-4 mb-4">
+            <button
+              onClick={prevStep}
+              className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded"
+              disabled={currentStepIndex <= 0 || isAutoPlaying}
+            >
+              Paso Anterior
+            </button>
+            <button
+              onClick={nextStep}
+              className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded"
+              disabled={currentStepIndex >= solution.length - 1 || isAutoPlaying}
+            >
+              Siguiente Paso
+            </button>
+            <button
+              onClick={resetAnimation}
+              className="bg-gray-800 hover:bg-gray-700 text-white px-4 py-2 rounded"
+            >
+              Reiniciar Animación
+            </button>
+            <button
+              onClick={isAutoPlaying ? stopAutoPlay : startAutoPlay}
+              className={`${isAutoPlaying ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700'} text-white px-4 py-2 rounded`}
+              disabled={currentStepIndex >= solution.length - 1}
+            >
+              {isAutoPlaying ? 'Detener Auto' : 'Reproducir Auto'}
+            </button>
+          </div>
+        )}
+        
+        {/* Universo y leyenda */}
+        {universe.length > 0 && (
+          <>
+            {renderUniverse()}
+            {renderLegend()}
+          </>
+        )}
+        
+        {isLoading && (
+          <div className="flex justify-center items-center mt-4 text-white">
+            <Loader className="animate-spin text-blue-500" size={24} />
+            <span className="ml-2">Cargando...</span>
+          </div>
+        )}
       </div>
-      
-      {/* Estado y controles de animación */}
-      {renderStatusInfo()}
-      
-      {status === 'solved' && (
-        <div className="flex gap-4 mb-4">
-          <button
-            onClick={prevStep}
-            className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded"
-            disabled={currentStepIndex <= 0}
-          >
-            Paso Anterior
-          </button>
-          <button
-            onClick={nextStep}
-            className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded"
-            disabled={currentStepIndex >= solution.length - 1}
-          >
-            Siguiente Paso
-          </button>
-          <button
-            onClick={resetAnimation}
-            className="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded"
-          >
-            Reiniciar Animación
-          </button>
-        </div>
-      )}
-      
-      {/* Universo y leyenda */}
-      {universe.length > 0 && (
-        <>
-          {renderUniverse()}
-          {renderLegend()}
-        </>
-      )}
-      
-      {isLoading && (
-        <div className="flex justify-center items-center mt-4">
-          <Loader className="animate-spin text-blue-500" size={24} />
-          <span className="ml-2">Cargando...</span>
-        </div>
-      )}
     </div>
   );
 }
