@@ -248,6 +248,20 @@ export default function GalacticExplorer() {
       
       // Si ya visitamos esta celda, retornamos false
       if (visited.has(posKey)) return false;
+
+      // Verificamos si es una salida de portal o agujero de gusano
+      if (universeCopy[row][col].type === CELL_TYPES.PORTAL_OUT || 
+          universeCopy[row][col].type === CELL_TYPES.WORMHOLE_OUT) {
+        // Solo permitimos entrar si venimos de su entrada correspondiente
+        const lastPos = path[path.length - 1];
+        if (!lastPos) return false;
+        
+        const [lastRow, lastCol] = lastPos;
+        const isFromPortal = universeCopy[lastRow][lastCol].type === CELL_TYPES.PORTAL_IN;
+        const isFromWormhole = universeCopy[lastRow][lastCol].type === CELL_TYPES.WORMHOLE_IN;
+        
+        if (!isFromPortal && !isFromWormhole) return false;
+      }
       
       // Verificamos si es un agujero negro
       if (universeCopy[row][col].type === CELL_TYPES.BLACK_HOLE) {
@@ -303,83 +317,94 @@ export default function GalacticExplorer() {
       // Marcamos la celda como visitada
       visited.add(posKey);
       
-      // Si es un portal de entrada, OBLIGATORIAMENTE nos movemos a su destino
+      // Si es un portal, nos movemos OBLIGATORIAMENTE a su destino
       if (universeCopy[row][col].type === CELL_TYPES.PORTAL_IN) {
         const [destRow, destCol] = universeCopy[row][col].additionalInfo.destination;
-        if (backtrack(destRow, destCol, newEnergy, new Set(visited), depth + 1)) {
-          return true;
+        // Verificamos que el destino no sea un agujero negro
+        if (universeCopy[destRow][destCol].type !== CELL_TYPES.BLACK_HOLE) {
+          if (backtrack(destRow, destCol, newEnergy, new Set(visited), depth + 1)) {
+            return true;
+          }
         }
-        // Si no encontramos solución desde el destino del portal, retrocedemos
+        // Si no podemos teleportarnos, retrocedemos
         path.pop();
         energyHistory.pop();
         return false;
       }
       
-      // Si es un agujero de gusano de entrada y no ha sido usado, OBLIGATORIAMENTE nos movemos a su salida
+      // Si es un agujero de gusano y no ha sido usado, nos movemos OBLIGATORIAMENTE a su salida
       if (universeCopy[row][col].type === CELL_TYPES.WORMHOLE_IN && !universeCopy[row][col].additionalInfo.used) {
         const [destRow, destCol] = universeCopy[row][col].additionalInfo.destination;
-        universeCopy[row][col].additionalInfo.used = true; // Marcamos como usado
-        if (backtrack(destRow, destCol, newEnergy, new Set(visited), depth + 1)) {
-          return true;
+        // Verificamos que el destino no sea un agujero negro
+        if (universeCopy[destRow][destCol].type !== CELL_TYPES.BLACK_HOLE) {
+          universeCopy[row][col].additionalInfo.used = true; // Marcamos como usado
+          if (backtrack(destRow, destCol, newEnergy, new Set(visited), depth + 1)) {
+            return true;
+          }
+          universeCopy[row][col].additionalInfo.used = false; // Desmarcamos si no encontramos solución
         }
-        // Si no encontramos solución desde la salida del agujero de gusano, retrocedemos
-        universeCopy[row][col].additionalInfo.used = false; // Desmarcamos
+        // Si no podemos teleportarnos, retrocedemos
         path.pop();
         energyHistory.pop();
         return false;
       }
       
-      // Movimientos posibles: arriba, abajo, izquierda, derecha
-      const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
-      
-      // Añadimos algo de aleatoriedad en la exploración
-      if (Math.random() < 0.3) { // 30% de las veces exploramos en orden aleatorio
-        for (let i = directions.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [directions[i], directions[j]] = [directions[j], directions[i]];
-        }
-      } else {
-        // El resto del tiempo usamos una heurística que combina distancia y energía
-        const [targetRow, targetCol] = universeData.destino;
-        directions.sort((a, b) => {
-          const [dr1, dc1] = a;
-          const [dr2, dc2] = b;
-          const newRow1 = row + dr1;
-          const newCol1 = col + dc1;
-          const newRow2 = row + dr2;
-          const newCol2 = col + dc2;
-          
-          // Calculamos distancia Manhattan
-          const dist1 = Math.abs(newRow1 - targetRow) + Math.abs(newCol1 - targetCol);
-          const dist2 = Math.abs(newRow2 - targetRow) + Math.abs(newCol2 - targetCol);
-          
-          // Consideramos también el costo de energía si la celda es válida
-          const energy1 = (newRow1 >= 0 && newRow1 < universeCopy.length && 
-                          newCol1 >= 0 && newCol1 < universeCopy[0].length) ? 
-                          universeCopy[newRow1][newCol1].energyCost : Infinity;
-          
-          const energy2 = (newRow2 >= 0 && newRow2 < universeCopy.length && 
-                          newCol2 >= 0 && newCol2 < universeCopy[0].length) ? 
-                          universeCopy[newRow2][newCol2].energyCost : Infinity;
-          
-          // Combinamos distancia y energía para la heurística
-          const score1 = dist1 * energy1;
-          const score2 = dist2 * energy2;
-          
-          return score1 - score2;
-        });
-      }
-
-      for (const [dr, dc] of directions) {
-        const newRow = row + dr;
-        const newCol = col + dc;
+      // Solo exploramos otras direcciones si NO estamos en una entrada de portal o agujero de gusano
+      if (universeCopy[row][col].type !== CELL_TYPES.PORTAL_IN && 
+          universeCopy[row][col].type !== CELL_TYPES.WORMHOLE_IN) {
         
-        // Verificar que la nueva posición está dentro de los límites
-        if (newRow >= 0 && newRow < universeCopy.length && 
-            newCol >= 0 && newCol < universeCopy[0].length) {
-          // Intentamos movernos a la nueva posición
-          if (backtrack(newRow, newCol, newEnergy, new Set(visited), depth + 1)) {
-            return true;
+        // Movimientos posibles: arriba, abajo, izquierda, derecha
+        const directions = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+        
+        // Añadimos algo de aleatoriedad en la exploración
+        if (Math.random() < 0.3) { // 30% de las veces exploramos en orden aleatorio
+          for (let i = directions.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [directions[i], directions[j]] = [directions[j], directions[i]];
+          }
+        } else {
+          // El resto del tiempo usamos una heurística que combina distancia y energía
+          const [targetRow, targetCol] = universeData.destino;
+          directions.sort((a, b) => {
+            const [dr1, dc1] = a;
+            const [dr2, dc2] = b;
+            const newRow1 = row + dr1;
+            const newCol1 = col + dc1;
+            const newRow2 = row + dr2;
+            const newCol2 = col + dc2;
+            
+            // Calculamos distancia Manhattan
+            const dist1 = Math.abs(newRow1 - targetRow) + Math.abs(newCol1 - targetCol);
+            const dist2 = Math.abs(newRow2 - targetRow) + Math.abs(newCol2 - targetCol);
+            
+            // Consideramos también el costo de energía si la celda es válida
+            const energy1 = (newRow1 >= 0 && newRow1 < universeCopy.length && 
+                            newCol1 >= 0 && newCol1 < universeCopy[0].length) ? 
+                            universeCopy[newRow1][newCol1].energyCost : Infinity;
+            
+            const energy2 = (newRow2 >= 0 && newRow2 < universeCopy.length && 
+                            newCol2 >= 0 && newCol2 < universeCopy[0].length) ? 
+                            universeCopy[newRow2][newCol2].energyCost : Infinity;
+            
+            // Combinamos distancia y energía para la heurística
+            const score1 = dist1 * energy1;
+            const score2 = dist2 * energy2;
+            
+            return score1 - score2;
+          });
+        }
+
+        for (const [dr, dc] of directions) {
+          const newRow = row + dr;
+          const newCol = col + dc;
+          
+          // Verificar que la nueva posición está dentro de los límites
+          if (newRow >= 0 && newRow < universeCopy.length && 
+              newCol >= 0 && newCol < universeCopy[0].length) {
+            // Intentamos movernos a la nueva posición
+            if (backtrack(newRow, newCol, newEnergy, new Set(visited), depth + 1)) {
+              return true;
+            }
           }
         }
       }
@@ -590,8 +615,8 @@ export default function GalacticExplorer() {
 
   // Función para generar un mapa aleatorio
   const generateRandomMap = () => {
-    const filas = 10;
-    const columnas = 10;
+    const filas = 15;
+    const columnas = 15;
     
     const randomCoord = () => [
       Math.floor(Math.random() * filas),
@@ -618,8 +643,8 @@ export default function GalacticExplorer() {
     const destino = [filas - 1, columnas - 1];
     takenCoords.push(origen, destino);
 
-    // Generar agujeros negros (3-5)
-    const numAgujerosNegros = Math.floor(Math.random() * 3) + 3;
+    // Generar agujeros negros (5-8)
+    const numAgujerosNegros = Math.floor(Math.random() * 4) + 5;
     const agujerosNegros = [];
     for (let i = 0; i < numAgujerosNegros; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -627,8 +652,8 @@ export default function GalacticExplorer() {
       takenCoords.push(coord);
     }
 
-    // Generar estrellas gigantes (2-4)
-    const numEstrellasGigantes = Math.floor(Math.random() * 3) + 2;
+    // Generar estrellas gigantes (3-6)
+    const numEstrellasGigantes = Math.floor(Math.random() * 4) + 3;
     const estrellasGigantes = [];
     for (let i = 0; i < numEstrellasGigantes; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -636,8 +661,8 @@ export default function GalacticExplorer() {
       takenCoords.push(coord);
     }
 
-    // Generar portales (1-2 pares)
-    const numPortales = Math.floor(Math.random() * 2) + 1;
+    // Generar portales (2-4 pares)
+    const numPortales = Math.floor(Math.random() * 3) + 2;
     const portales = [];
     for (let i = 0; i < numPortales; i++) {
       const desde = getRandomUniqueCoord(takenCoords);
@@ -646,8 +671,8 @@ export default function GalacticExplorer() {
       takenCoords.push(desde, hasta);
     }
 
-    // Generar agujeros de gusano (1-2 pares)
-    const numGusanos = Math.floor(Math.random() * 2) + 1;
+    // Generar agujeros de gusano (2-4 pares)
+    const numGusanos = Math.floor(Math.random() * 3) + 2;
     const agujerosGusano = [];
     for (let i = 0; i < numGusanos; i++) {
       const entrada = getRandomUniqueCoord(takenCoords);
@@ -656,8 +681,8 @@ export default function GalacticExplorer() {
       takenCoords.push(entrada, salida);
     }
 
-    // Generar zonas de recarga (2-4)
-    const numZonasRecarga = Math.floor(Math.random() * 3) + 2;
+    // Generar zonas de recarga (3-6)
+    const numZonasRecarga = Math.floor(Math.random() * 4) + 3;
     const zonasRecarga = [];
     for (let i = 0; i < numZonasRecarga; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -681,7 +706,7 @@ export default function GalacticExplorer() {
       agujerosGusano,
       zonasRecarga,
       celdasCargaRequerida: [],
-      cargaInicial: 50,
+      cargaInicial: 100,
       matrizInicial
     };
 
