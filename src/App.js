@@ -525,8 +525,8 @@ export default function GalacticExplorer() {
     const destino = [filas - 1, columnas - 1];
     takenCoords.push(origen, destino);
 
-    // Generar agujeros negros (3-5)
-    const numAgujerosNegros = Math.floor(Math.random() * 3) + 3;
+    // Generar agujeros negros (5-8)
+    const numAgujerosNegros = Math.floor(Math.random() * 4) + 5;
     const agujerosNegros = [];
     for (let i = 0; i < numAgujerosNegros; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -534,8 +534,8 @@ export default function GalacticExplorer() {
       takenCoords.push(coord);
     }
 
-    // Generar estrellas gigantes (2-4)
-    const numEstrellasGigantes = Math.floor(Math.random() * 3) + 2;
+    // Generar estrellas gigantes (3-6)
+    const numEstrellasGigantes = Math.floor(Math.random() * 4) + 3;
     const estrellasGigantes = [];
     for (let i = 0; i < numEstrellasGigantes; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -543,8 +543,8 @@ export default function GalacticExplorer() {
       takenCoords.push(coord);
     }
 
-    // Generar portales (1-2 pares)
-    const numPortales = Math.floor(Math.random() * 2) + 1;
+    // Generar portales (2-4 pares)
+    const numPortales = Math.floor(Math.random() * 3) + 2;
     const portales = [];
     for (let i = 0; i < numPortales; i++) {
       const desde = getRandomUniqueCoord(takenCoords);
@@ -553,8 +553,8 @@ export default function GalacticExplorer() {
       takenCoords.push(desde, hasta);
     }
 
-    // Generar agujeros de gusano (1-2 pares)
-    const numGusanos = Math.floor(Math.random() * 2) + 1;
+    // Generar agujeros de gusano (2-4 pares)
+    const numGusanos = Math.floor(Math.random() * 3) + 2;
     const agujerosGusano = [];
     for (let i = 0; i < numGusanos; i++) {
       const entrada = getRandomUniqueCoord(takenCoords);
@@ -563,8 +563,8 @@ export default function GalacticExplorer() {
       takenCoords.push(entrada, salida);
     }
 
-    // Generar zonas de recarga (2-4)
-    const numZonasRecarga = Math.floor(Math.random() * 3) + 2;
+    // Generar zonas de recarga (3-6)
+    const numZonasRecarga = Math.floor(Math.random() * 4) + 3;
     const zonasRecarga = [];
     for (let i = 0; i < numZonasRecarga; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
