@@ -20,20 +20,20 @@ const App = () => {
       default:
         return (
           <div className="text-center p-8">
-            <h1 className="text-4xl font-bold text-gray-800 mb-6">
-              Bienvenido a la Aplicación
+            <h1 className="text-5xl font-bold text-gray-800 mb-6">
+              Bienvenido a AUTOMAT-APPS
             </h1>
-            <p className="text-gray-600 text-lg mb-8">
+            <p className="text-xl text-gray-600 text-lg mb-8">
               Selecciona una opción para comenzar
             </p>
-            <div  className="flex justify-center space-x-4">
-              <div onClick={() => setCurrentView('automata')} className="bg-blue-100 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-800">Validador de Autómatas</h3>
-                <p className="text-sm text-blue-600">Herramienta para validar autómatas finitos</p>
+            <div  className="flex justify-center space-x-8">
+              <div onClick={() => setCurrentView('automata')} className="bg-blue-100 p-8 rounded-lg cursor-pointer transform transition duration-300 hover:scale-105">
+                <h3 className="font-bold text-xl text-blue-800">Validador de Autómatas</h3>
+                <p className="text-base text-blue-600">Herramienta para validar autómatas finitos</p>
               </div>
-              <div onClick={() => setCurrentView('space')} className="bg-purple-100 p-4 rounded-lg">
-                <h3 className="font-semibold text-purple-800">Space Browser</h3>
-                <p className="text-sm text-purple-600">Explorador del espacio exterior</p>
+              <div onClick={() => setCurrentView('space')} className="bg-purple-100 p-8 rounded-lg cursor-pointer transform transition duration-300 hover:scale-105">
+                <h3 className="font-bold text-xl text-purple-800">Space Browser</h3>
+                <p className="text-base text-purple-600">Explorador del espacio exterior</p>
               </div>
             </div>
           </div>
@@ -48,7 +48,7 @@ const App = () => {
         <div className="max-w-6xl mx-auto px-4">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <h1 className="text-xl font-bold text-gray-800">Mi Aplicación</h1>
+              <h1 className="text-xl font-bold text-gray-800">AUTOMAT-APPS</h1>
             </div>
             
             {/* Botones de navegación */}

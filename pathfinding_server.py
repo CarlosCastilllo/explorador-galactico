@@ -143,19 +143,24 @@ class GalacticPathfinder:
         
         def backtrack(row: int, col: int, energy: int, 
                      visited: Set[Tuple[int, int]], path: List[Tuple[int, int]], 
-                     energy_log: List[int], depth: int = 0) -> bool:
+                     energy_log: List[int], depth: int = 0,
+                     entered_portal: bool = False) -> bool:
             
             # Límite de profundidad para evitar loops infinitos
             if depth > max_iterations:
                 return False
             
             current_pos = (row, col)
+            current_cell = self.universe[row][col]
+
+            # No permitir estar en salidas de portal/agujero de gusano a menos que hayamos entrado por la entrada
+            if (current_cell.type in [CELL_TYPES['PORTAL_OUT'], CELL_TYPES['WORMHOLE_OUT']] and 
+                not entered_portal):
+                return False # Rechazar inmediatamente esta rama de camino
             
             # Si ya visitamos esta posición, retornar False
             if current_pos in visited:
                 return False
-            
-            current_cell = self.universe[row][col]
             
             # Verificar agujero negro
             if current_cell.type == CELL_TYPES['BLACK_HOLE']:
@@ -206,7 +211,7 @@ class GalacticPathfinder:
                 if dest:
                     dest_row, dest_col = dest
                     if backtrack(dest_row, dest_col, new_energy, visited.copy(), 
-                               path, energy_log, depth + 1):
+                               path, energy_log, depth + 1, True):
                         return True
                 # Si el portal no lleva a una solución, retroceder
                 path.pop()
@@ -224,12 +229,19 @@ class GalacticPathfinder:
                     dest_row, dest_col = dest
                     
                     if backtrack(dest_row, dest_col, new_energy, visited.copy(), 
-                               path, energy_log, depth + 1):
+                               path, energy_log, depth + 1, True):
                         return True
                     
                     # Si no funciona, desmarcar y retroceder
                     current_cell.additional_info['used'] = False
                 
+                path.pop()
+                energy_log.pop()
+                return False
+            
+            # No permitir estar en salidas de portal/agujero de gusano a menos que hayamos entrado por la entrada
+            if (current_cell.type in [CELL_TYPES['PORTAL_OUT'], CELL_TYPES['WORMHOLE_OUT']] and 
+                not entered_portal):
                 path.pop()
                 energy_log.pop()
                 return False
@@ -249,37 +261,31 @@ class GalacticPathfinder:
             # Explorar cada vecino
             for neighbor_pos in neighbors:
                 n_row, n_col = neighbor_pos
+                neighbor_cell = self.universe[n_row][n_col]
                 
-                # Crear copias para el backtracking
-                new_visited = visited.copy()
+                # No permitir moverse a salidas de portal/agujero de gusano a menos que hayamos entrado por la entrada
+                if (neighbor_cell.type in [CELL_TYPES['PORTAL_OUT'], CELL_TYPES['WORMHOLE_OUT']] and 
+                    not entered_portal):
+                    continue
                 
-                if backtrack(n_row, n_col, new_energy, new_visited, 
-                           path, energy_log, depth + 1):
+                if backtrack(n_row, n_col, new_energy, visited.copy(), 
+                           path, energy_log, depth + 1, False):
                     return True
             
-            # Si no encontramos solución, retroceder
+            # Si ningún vecino lleva a una solución, retroceder
             path.pop()
             energy_log.pop()
             return False
         
-        # Iniciar búsqueda
-        start_row, start_col = self.start_pos
+        # Iniciar la búsqueda desde el origen
         path = []
         energy_log = []
         visited = set()
         
-        try:
-            if backtrack(start_row, start_col, self.initial_energy, 
-                        visited, path, energy_log):
-                return path, energy_log
-            else:
-                return None, None
-        except RecursionError:
-            print("Error: Máxima recursión alcanzada")
-            return None, None
-        except Exception as e:
-            print(f"Error durante la búsqueda: {e}")
-            return None, None
+        if backtrack(self.start_pos[0], self.start_pos[1], self.initial_energy, 
+                    visited, path, energy_log):
+            return path, energy_log
+        return None, None
 
 @app.route('/find_path', methods=['POST'])
 def find_path():

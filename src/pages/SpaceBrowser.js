@@ -497,8 +497,8 @@ export default function GalacticExplorer() {
 
   // Función para generar un mapa aleatorio
   const generateRandomMap = () => {
-    const filas = 30;
-    const columnas = 30;
+    const filas = 10;
+    const columnas = 10;
 
     const randomCoord = () => [
       Math.floor(Math.random() * filas),
@@ -525,8 +525,8 @@ export default function GalacticExplorer() {
     const destino = [filas - 1, columnas - 1];
     takenCoords.push(origen, destino);
 
-    // Generar agujeros negros (5-8)
-    const numAgujerosNegros = Math.floor(Math.random() * 8) + 5;
+    // Generar agujeros negros (2-5)
+    const numAgujerosNegros = Math.floor(Math.random() * 4) + 2; // Rango de 2 a 5
     const agujerosNegros = [];
     for (let i = 0; i < numAgujerosNegros; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -534,8 +534,8 @@ export default function GalacticExplorer() {
       takenCoords.push(coord);
     }
 
-    // Generar estrellas gigantes (3-6)
-    const numEstrellasGigantes = Math.floor(Math.random() * 8) + 3;
+    // Generar estrellas gigantes (1-3)
+    const numEstrellasGigantes = Math.floor(Math.random() * 3) + 1; // Rango de 1 a 3
     const estrellasGigantes = [];
     for (let i = 0; i < numEstrellasGigantes; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -543,8 +543,8 @@ export default function GalacticExplorer() {
       takenCoords.push(coord);
     }
 
-    // Generar portales (2-4 pares)
-    const numPortales = Math.floor(Math.random() * 8) + 2;
+    // Generar portales (1-2 pares)
+    const numPortales = Math.floor(Math.random() * 2) + 1; // Rango de 1 a 2
     const portales = [];
     for (let i = 0; i < numPortales; i++) {
       const desde = getRandomUniqueCoord(takenCoords);
@@ -553,8 +553,8 @@ export default function GalacticExplorer() {
       takenCoords.push(desde, hasta);
     }
 
-    // Generar agujeros de gusano (2-4 pares)
-    const numGusanos = Math.floor(Math.random() * 8) + 2;
+    // Generar agujeros de gusano (1-2 pares)
+    const numGusanos = Math.floor(Math.random() * 2) + 1; // Rango de 1 a 2
     const agujerosGusano = [];
     for (let i = 0; i < numGusanos; i++) {
       const entrada = getRandomUniqueCoord(takenCoords);
@@ -563,8 +563,8 @@ export default function GalacticExplorer() {
       takenCoords.push(entrada, salida);
     }
 
-    // Generar zonas de recarga (3-6)
-    const numZonasRecarga = Math.floor(Math.random() * 14) + 3;
+    // Generar zonas de recarga (1-3)
+    const numZonasRecarga = Math.floor(Math.random() * 3) + 1; // Rango de 1 a 3
     const zonasRecarga = [];
     for (let i = 0; i < numZonasRecarga; i++) {
       const coord = getRandomUniqueCoord(takenCoords);
@@ -592,7 +592,7 @@ export default function GalacticExplorer() {
       agujerosGusano,
       zonasRecarga,
       celdasCargaRequerida: [],
-      cargaInicial: 50,
+      cargaInicial: 100, // Ajustado para mapa 10x10
       matrizInicial,
     };
 
